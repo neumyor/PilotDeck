@@ -22,12 +22,13 @@ If the user already named sessions, use them. Otherwise run `node "$SESSIONS" li
 
 ## 2. Extract subtasks
 
-Start one `general-purpose` subagent per session, all in the same message. Give each this directive, with the absolute script path and the session id filled in:
+Create `<work>/sessions/`. Start one `general-purpose` subagent per session, all in the same message. Give each this directive, with the absolute paths, the session id, and the session's number from the list filled in:
 
 ```text
 Read a past PilotDeck conversation and list the subtasks in it.
-Run: node "<absolute path to sessions.mjs>" read <sessionId>
-If a tool result you need is truncated, run it again with --tool-chars 20000.
+Run: node "<absolute path to sessions.mjs>" read <sessionId> > "<work>/sessions/<number>.txt"
+Then read that file with read_file, page by page if it is long.
+If a tool result you need is truncated in the file, run the command again with --tool-chars 20000.
 A subtask is one piece of work the user asked for, such as revising the introduction of a paper.
 For each subtask report:
 - Request: the user's original words.
@@ -38,7 +39,7 @@ For each subtask report:
 - Preferences: preferences the user stated.
 - Accepted result: what the user finally accepted.
 - External actions: messages sent, code pushed, files deleted, or "none".
-Do not modify any files. Put everything in your final reply.
+Do not modify any other files. Put everything in your final reply.
 ```
 
 ## 3. Group into task types
@@ -61,7 +62,8 @@ For each type, write `<work>/<slug>/v1/SKILL.md`:
 
 - **Frontmatter:** put `name` and `description` each on a single line. PilotDeck does not read multi-line YAML values. The description says what the skill does and when to use it, based on the situation in which the task starts.
 - **Body:** the goal, inputs and outputs, the steps, and the user's preferences and corrections written as rules, each with its reason.
-- **Reusable practices only:** never copy content that belongs to one task, such as a paper title, a paragraph, or a file name. A skill that contains the answers to its test cases proves nothing.
+- **Rules come from the user:** a rule must trace back to something the user asked for, corrected, or stated as a preference. Leave out choices the assistant made on its own, even when the user accepted the result without comment.
+- **Reusable practices only:** never copy content that belongs to one task, such as a paper title, a paragraph, a file name, a method name, or a number. A skill that contains the answers to its test cases proves nothing. Reread each draft before testing and remove anything taken from a specific session.
 - **No sensitive data:** no secrets, account names, or personal data.
 - **Slug:** lowercase letters, digits, and hyphens.
 
@@ -83,7 +85,7 @@ Run at most 3 rounds per type. In each round:
    You are testing a skill. Read <absolute path to the skill version under test> with read_file and follow it while completing the request below.
    Request: <the user's original words>
    Input: <inline input, or "read <absolute path>">
-   Do not modify files, run commands that change anything, send messages, or push code.
+   Do not modify files, run commands that change anything, send messages, or push code. If the skill tells you to edit files, put the full edited content in your reply instead.
    Give the complete deliverable in your reply. If the request asks for a file, put the file's content in your reply.
    Then list which parts of the skill you followed.
    ```

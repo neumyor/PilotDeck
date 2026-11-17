@@ -200,12 +200,16 @@ async function listCommand(options) {
   });
 }
 
+// Accepts the full id (`web:s_<uuid>`) or the id without its channel prefix
+// (`s_<uuid>`), which models often pass along.
 function findSessionFile(sessionId) {
-  const fileName = `${sanitizeSessionId(sessionId)}.jsonl`;
-  const matches = listProjects(pilotHome())
-    .map((project) => ({ project, path: join(project.chatDir, fileName) }))
-    .filter((candidate) => existsSync(candidate.path));
-  matches.sort((a, b) => statSync(b.path).mtimeMs - statSync(a.path).mtimeMs);
+  const wanted = sanitizeSessionId(sessionId);
+  const files = listProjects(pilotHome()).flatMap(sessionFiles);
+  const exact = files.filter((file) => file.sessionId === wanted);
+  const matches = exact.length > 0
+    ? exact
+    : files.filter((file) => /[:-]$/.test(file.sessionId.slice(0, -wanted.length)) && file.sessionId.endsWith(wanted));
+  matches.sort((a, b) => b.modified - a.modified);
   return matches[0];
 }
 

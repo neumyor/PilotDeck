@@ -183,6 +183,10 @@ test("read renders every turn, including content before compaction", () => {
     assert.match(stdout, /\[subagent explore\] Find related work\n→ Found three papers/);
     assert.match(stdout, /## Turn 2 · .*\n\[user\] Do not open paragraphs with 'In recent years'\./);
     assert.doesNotMatch(stdout, /private reasoning|COMPACT SUMMARY|SYNTHETIC REMINDER/);
+
+    const withoutPrefix = run(fixture, fixture.otherProject, ["read", "s_paper"]);
+    assert.equal(withoutPrefix.status, 0);
+    assert.match(withoutPrefix.stdout, /^# Paper intro revision\nsession: web:s_paper\n/);
   } finally {
     fixture.cleanup();
   }
