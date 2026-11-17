@@ -32,6 +32,7 @@ A subtask is one piece of work the user asked for, such as revising the introduc
 For each subtask report:
 - Request: the user's original words.
 - Input: the material the work started from (file content, pasted text), quoted from the transcript, or "not recoverable".
+- Background: facts from anywhere in the conversation that the work relied on but that are not in the input, such as what the user's own method or product is.
 - Skills used: skills the assistant read for this subtask.
 - Corrections: every place the user corrected or redirected the assistant, quoted verbatim with the turn number.
 - Preferences: preferences the user stated.
@@ -67,7 +68,7 @@ For each type, write `<work>/<slug>/v1/SKILL.md`:
 Write `<work>/<slug>/cases.md` with 1 to 3 test cases. Each test case is a real request from the sessions whose input is recoverable:
 
 - **Request:** the user's original words.
-- **Input:** short inputs inline; long inputs saved to `<work>/<slug>/inputs/<case>.md`.
+- **Input:** the input together with the background it relies on. Short inputs go inline; long inputs are saved to `<work>/<slug>/inputs/<case>.md`.
 - **Criteria:** one per correction, preference, or success criterion that applies. Each criterion must be checkable from a written reply.
 
 Do not use requests that involve external actions (sending messages, pushing code, deleting files) as test cases. A type with no usable test case is marked "untested" and skips step 5.
@@ -88,7 +89,9 @@ Run at most 3 rounds per type. In each round:
    ```
 
 2. Check every criterion against the reply and note pass or fail.
-3. If every criterion passes, stop testing this type. Otherwise, work out for each failure whether the skill was missing the information, was vague, or was wrong. Fix only those parts, write `<work>/<slug>/v<k+1>/SKILL.md`, and run all of this type's test cases again.
+3. If every criterion passes, stop testing this type. Otherwise, work out the cause of each failure:
+   - **The test case lacked information the real session had:** for example, the reply left a placeholder because the input did not say what the user's method is. Add that information to the test case and run only that test case again. Leave the skill unchanged.
+   - **The skill was missing the information, was vague, or was wrong:** fix only those parts, write `<work>/<slug>/v<k+1>/SKILL.md`, and run all of this type's test cases again.
 
 When a type stops, keep the version that passed the most criteria. On a tie, keep the shorter one.
 
