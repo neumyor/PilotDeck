@@ -52,7 +52,7 @@ Group the subtasks from all sessions into task types. For each type write down:
 - success criteria;
 - the user's preferences and corrections, quoted.
 
-Keep a type only if it has a correction or an explicit preference, or appears in two or more sessions. Keep at most 5 types. Check `<available-skills>` for skills that already cover a type, and read the overlapping ones.
+Keep a type only if it has a correction or an explicit preference, or appears in two or more sessions. Keep at most 5 types. Check `<available-skills>` for skills that already cover a type, and read the overlapping ones from the paths listed there instead of searching the file system.
 
 Show the user a short table with each type, its source sessions, the key corrections, and any related existing skill. Ask them to confirm before you continue.
 
@@ -95,7 +95,7 @@ Run at most 3 rounds per type. In each round:
    - **The test case lacked information the real session had:** for example, the reply left a placeholder because the input did not say what the user's method is. Add that information to the test case and run only that test case again. Leave the skill unchanged.
    - **The skill was missing the information, was vague, or was wrong:** fix only those parts, write `<work>/<slug>/v<k+1>/SKILL.md`, and run all of this type's test cases again.
 
-When a type stops, keep the version that passed the most criteria. On a tie, keep the shorter one.
+When a type stops, keep the version that passed the most criteria. On a tie, keep the shorter one. The kept version is final: the user confirms it in step 6 and it is installed exactly as tested. If you find something to change after a type has stopped, revise it and rerun its test cases before step 6.
 
 ## 6. Decide and install
 
@@ -107,7 +107,7 @@ For each type, show the user:
 - the path of the draft;
 - a recommendation, with the reason: create a new skill, merge into an existing skill, or do not save.
 
-Ask the user to confirm each recommendation with `ask_user_question` (at most 4 questions per call). Then:
+Ask the user to confirm each recommendation with `ask_user_question` (at most 4 questions per call). Then install the kept version without further edits:
 
 - **New skill:** write it to `${PILOT_HOME:-~/.pilotdeck}/skills/<slug>/SKILL.md` for all projects, or to `<project root>/.pilotdeck/skills/<slug>/SKILL.md` for this project only, as the user chooses.
 - **Merge into a user or project skill:** copy the existing SKILL.md to `<work>/backup/<slug>/SKILL.md` first. Then write the merged skill: keep the existing content, add the new rules, and when the two conflict, follow the user's corrections.

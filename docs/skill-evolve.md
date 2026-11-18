@@ -32,7 +32,8 @@ result (new, merge into an existing skill, or discard; project or user level).
    missing information from the original session is fixed in the test case;
    any other failure revises the draft and reruns all of that type's cases. Stop
    when all criteria pass or after three versions; keep the version that passed
-   the most criteria, preferring the shorter one on ties.
+   the most criteria, preferring the shorter one on ties. The kept version is
+   installed exactly as tested.
 6. After confirmation, write to `~/.pilotdeck/skills/<slug>/` or
    `<project>/.pilotdeck/skills/<slug>/`. A merged skill's previous SKILL.md is
    copied to the working directory first; merging into a bundled skill writes a
