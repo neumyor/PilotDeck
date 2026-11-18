@@ -82,16 +82,31 @@ function sessionFiles(project) {
     .filter((file) => !INTERNAL_SESSION_PATTERN.test(file.sessionId));
 }
 
-async function* readEntries(path) {
+// Entries on the active history branch. When the user regenerates or restores
+// a turn, PilotDeck appends a `restore` boundary listing the sequences that
+// stay visible; abandoned entries remain in the append-only file and are
+// dropped here, matching `activeTranscriptEntries` in the runtime.
+async function readEntries(path) {
   const lines = createInterface({ input: createReadStream(path, "utf8"), crlfDelay: Infinity });
+  const entries = [];
   for await (const line of lines) {
     if (!line.trim()) continue;
     try {
-      yield JSON.parse(line);
+      entries.push(JSON.parse(line));
     } catch {
       // A partially written trailing line is skipped, matching the runtime reader.
     }
   }
+  let visible = [];
+  for (const entry of entries) {
+    const boundary = entry.type === "control_boundary" ? entry.boundary : undefined;
+    if (boundary?.kind === "restore" && Array.isArray(boundary.visibleSequences)) {
+      const sequences = new Set(boundary.visibleSequences);
+      visible = entries.filter((candidate) => candidate.sequence < entry.sequence && sequences.has(candidate.sequence));
+    }
+    visible.push(entry);
+  }
+  return visible;
 }
 
 // Messages the user saw in the conversation. Synthetic prompts injected by the
@@ -142,7 +157,7 @@ async function summarizeSession(file, query) {
   let firstPrompt;
   let matched = !query;
   const needle = query?.toLowerCase();
-  for await (const entry of readEntries(file.path)) {
+  for (const entry of await readEntries(file.path)) {
     if (entry.type === "session_metadata" && entry.metadata) {
       if (typeof entry.metadata.title === "string") title = entry.metadata.title;
       if (typeof entry.metadata.aiTitle === "string") aiTitle = entry.metadata.aiTitle;
@@ -261,7 +276,7 @@ async function readCommand(sessionId, options) {
   const turns = [];
   const turnIndex = new Map();
   const subagentPrompts = new Map();
-  for await (const entry of readEntries(file.path)) {
+  for (const entry of await readEntries(file.path)) {
     createdAt ??= entry.createdAt;
     if (entry.type === "session_metadata" && entry.metadata) {
       if (typeof entry.metadata.title === "string") title = entry.metadata.title;

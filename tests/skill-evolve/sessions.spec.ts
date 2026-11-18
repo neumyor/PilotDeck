@@ -194,6 +194,34 @@ test("read renders every turn, including content before compaction", () => {
   }
 });
 
+test("read skips turns abandoned by a restore", () => {
+  const fixture = createFixture();
+  try {
+    const say = (role: string, text: string) => ({ role, content: [{ type: "text", text }] });
+    writeSession(join(fixture.home, "projects", "paper-id", "chats"), `web${FILE_SEP}s_regen.jsonl`, [
+      entry("accepted_input", "t1", 1, { messages: [say("user", "First request")] }),
+      entry("assistant_message", "t1", 2, { message: say("assistant", "First reply") }),
+      entry("turn_result", "t1", 3, { result: { type: "success" } }),
+      entry("accepted_input", "t2", 4, { messages: [say("user", "Abandoned request")] }),
+      entry("assistant_message", "t2", 5, { message: say("assistant", "Abandoned reply") }),
+      entry("control_boundary", "t3", 6, {
+        boundary: { kind: "restore", operationId: "op-1", snapshot: { version: 1, messages: [] }, visibleSequences: [1, 2, 3] },
+      }),
+      entry("accepted_input", "t3", 7, { messages: [say("user", "Kept request")] }),
+      entry("assistant_message", "t3", 8, { message: say("assistant", "Kept reply") }),
+    ], new Date("2026-11-04T12:00:00Z"));
+
+    const { status, stdout } = run(fixture, fixture.paperProject, ["read", "web:s_regen"]);
+    assert.equal(status, 0);
+    assert.match(stdout, /turns: 2/);
+    assert.match(stdout, /\[user\] First request\n\[assistant\] First reply/);
+    assert.match(stdout, /\[user\] Kept request\n\[assistant\] Kept reply/);
+    assert.doesNotMatch(stdout, /Abandoned/);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("read reports unknown sessions and invalid options", () => {
   const fixture = createFixture();
   try {
