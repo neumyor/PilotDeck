@@ -1,106 +1,77 @@
-# Skill Evolve 方案
+# Skill evolve
 
-## 目标
+`skills/skill-evolve` is a bundled skill that turns selected past conversations
+into reusable skills. It captures the corrections and preferences a user gave in
+those conversations, tests each draft on real requests from them, and installs a
+skill only after the user confirms. It has no dedicated UI; it runs inside an
+ordinary chat session.
 
-用户指定一个或多个已有会话。PilotDeck 从中总结出可复用的 skill，把用户在会话里提过的偏好和纠正写进去，再用会话里的真实请求测试并修改。最后由用户决定新建、合并到已有 skill，还是不保存。
+## Usage
 
-## 使用流程
+Start a new session in the project whose conversations should be used, then ask
+for it in plain words ("use my recent paper-editing sessions for skill evolve")
+or pick `skill-evolve` from the composer's skill menu. Full Access avoids a
+confirmation for every script run and draft write. The assistant asks three
+times: which sessions to use, which task types to keep, and how to install each
+result (new, merge into an existing skill, or discard; project or user level).
 
-1. **启动**：用户新建一个会话，从输入框的“+”菜单选择 `skill-evolve`，或者直接说“用最近改论文的几个会话做 skill evolve”。
-2. **选择会话**：助手列出最近的会话，用户回复要用哪几个。
-3. **确认任务类型**：助手读取这些会话，列出总结出的任务类型，以及每类中用户纠正过的原话，用户确认。
-4. **编写与测试**：助手为每类写 skill，用真实请求测试并修改。
-5. **确认写入**：助手展示每个 skill 的内容、测试结果和处理建议，用户确认后写入。新 skill 从下一条消息开始生效。
+## Flow
 
-## 改动范围
+1. List sessions with `sessions.mjs list` and let the user choose.
+2. Start one `general-purpose` subagent per session. Each saves the transcript
+   text to the working directory, reads it with `read_file`, and reports every
+   subtask: request, input, background, corrections, preferences, accepted
+   result and external actions.
+3. Group subtasks into at most five task types. Keep a type only when it has a
+   correction or preference, or appears in two or more sessions.
+4. Write one draft per type plus one to three test cases taken from real
+   requests. Criteria come from the user's corrections. Requests with external
+   actions (sending messages, pushing code, deleting files) are not test cases.
+5. Run each test case in a subagent that reads the draft and answers without
+   modifying files; check every criterion. A failure caused by a test case
+   missing information from the original session is fixed in the test case;
+   any other failure revises the draft and reruns all of that type's cases. Stop
+   when all criteria pass or after three versions; keep the version that passed
+   the most criteria, preferring the shorter one on ties.
+6. After confirmation, write to `~/.pilotdeck/skills/<slug>/` or
+   `<project>/.pilotdeck/skills/<slug>/`. A merged skill's previous SKILL.md is
+   copied to the working directory first; merging into a bundled skill writes a
+   user-level skill with the same name.
 
-只新增文件，不修改任何已有文件。
+Drafts, test cases, transcript copies and backups stay in
+`<project>/.pilotdeck/skill-evolve/<timestamp>/`, which skill discovery ignores.
 
-| 文件 | 内容 |
-|---|---|
-| `skills/skill-evolve/SKILL.md` | 主会话的流程，以及两类子智能体的任务说明模板 |
-| `skills/skill-evolve/scripts/sessions.mjs` | 列出会话；把会话转录转成可读文本 |
-| `tests/skill-evolve/sessions.spec.ts` | 脚本测试 |
-| `docs/skill-evolve.md` | 本文档 |
+## Transcript reader
 
-### 需要其他模块负责人处理的改动
+`skills/skill-evolve/scripts/sessions.mjs` uses only Node built-ins and resolves
+`$PILOT_HOME` (default `~/.pilotdeck`).
 
-无。用到的都是现有机制：
+- `list [--all] [--query <text>] [--limit <n>]` lists the current project's
+  sessions, or every project's with `--all`, newest first. Always-On internal
+  sessions are hidden. `--query` keeps sessions whose user or assistant text
+  contains the text.
+- `read <sessionId> [--tool-chars <n>]` prints the active history branch turn by
+  turn: full user and assistant text, one line per tool call, tool results cut to
+  `--tool-chars` (default 2000) and subagent summaries. It keeps turns from
+  before compaction, skips compaction summaries, thinking and synthetic
+  messages, and drops turns discarded by a `restore` boundary. The id may omit
+  its channel prefix.
 
-- `skills/` 下的新目录会被自动识别为内置 skill。桌面版和 Docker 打包时都会整体复制这个目录。
-- 脚本通过 bash 用 `node` 运行，和 `pptx`、`spreadsheets` 等内置 skill 的做法相同。
-- 子智能体使用现有的 `general-purpose` 类型。
+The script reads the on-disk transcript format directly instead of importing
+`src/session`. Changes to the transcript path or `.cwd` marker
+(`src/pilot/paths.ts`), `sanitizeSessionIdForPath`, transcript entry types,
+`restore` boundaries (`activeTranscriptEntries`), message `synthetic` and
+`compactReplacement` metadata, or content block types need a matching update
+here and in `tests/skill-evolve/sessions.spec.ts`.
 
-## SKILL.md 的流程
+## Limits
 
-1. **选择会话**：运行 `sessions.mjs list`，列出当前项目最近 20 个会话，用户回复编号。
-2. **提取**：每个会话启动一个子智能体，所有子智能体同时启动。每个子智能体运行 `sessions.mjs read`，把会话文本写入工作目录下的 `sessions/<编号>.txt`，再用 `read_file` 分页读取，在回复中列出会话里的每个子任务，包括：
-   - 用户的原始请求；
-   - 当时的输入内容；
-   - 任务依赖的背景信息，例如用户自己的方法是什么；
-   - 用户纠正的原话；
-   - 最终被接受的结果。
-3. **归纳**：
-   - 主会话把子任务归成任务类型。每类写出目标、起始场景、输入输出、成功标准、用户偏好和纠正。
-   - 只保留满足任一条件的类型，最多 5 类：有用户纠正、有明确偏好、在多个会话中出现。
-   - 向用户展示，确认后继续。
-4. **编写**：
-   - 每类写一份 SKILL.md。
-   - 从会话中选 1 到 3 个真实请求作为测试用例，判定标准取自用户的纠正。
-   - 涉及对外操作（发送消息、推送代码、删除文件）的请求不作为用例。
-5. **测试与修改**，最多 3 轮：
-   - 每个用例启动一个子智能体，所有子智能体同时启动。子智能体先读当前版本的 SKILL.md，再完成请求。结果写在回复里，不修改文件。
-   - 主会话逐条对照判定标准。全部通过就停止。
-   - 未通过的原因是用例缺少原会话中有的信息时，把信息补进用例，只重跑这个用例，skill 保持不变。
-   - 未通过的原因在 skill 本身时，修改 SKILL.md，重跑这一类的全部用例。
-   - 结束后选通过条数最多的一版。
-6. **确认写入**：
-   - 逐类展示 description、主要规则、测试结果和处理建议。处理建议是三种之一：新建、合并到已有 skill、不保存。
-   - 用户确认后写入。写入位置为用户级 `~/.pilotdeck/skills/<slug>/` 或项目级 `.pilotdeck/skills/<slug>/`。
-   - 合并到已有 skill 之前，先把原文件复制到工作目录。合并到内置 skill 时，写一份同名的用户级 skill。
-
-草稿和测试用例放在工作目录 `<项目根目录>/.pilotdeck/skill-evolve/<时间>/` 中，这个位置不会被当成正式 skill 加载。
-
-**写作要求：**
-
-- 每条规则都要能追溯到用户提出的要求、纠正或偏好。助手自己做出、用户没有评论过的选择，不写成规则。
-- skill 中只写可复用的做法和偏好，不写某次任务的具体内容，例如标题、段落、文件名、方法名、数字。
-- 不写密钥和个人信息。
-- frontmatter 中的 `name` 和 `description` 各占一行。
-
-## 会话读取脚本
-
-转录文件位于 `$PILOT_HOME/projects/<项目>/chats/<sessionId>.jsonl`。`PILOT_HOME` 未设置时为 `~/.pilotdeck`。
-
-**`node sessions.mjs list [--all] [--query <文字>] [--limit <数量>]`**
-
-- 默认列出当前目录对应项目的会话；加 `--all` 列出所有项目的会话。
-- 按最后修改时间倒序排列，每行包含：编号、sessionId、标题、最后修改时间、项目路径、首条请求的前 80 字。
-- `--query`：只保留用户消息或助手文字中包含这段文字的会话。
-- 不列出 Always-On 的内部会话。
-
-**`node sessions.mjs read <sessionId> [--tool-chars <字数>]`**
-
-- 按轮次输出：
-  - 用户消息和助手文字输出全文；
-  - 每次工具调用输出一行；
-  - 工具结果截断到 `--tool-chars` 字，默认 2000。
-- 包含压缩之前的全部内容；跳过压缩摘要、思考内容和系统注入的消息。
-- 会话不存在时报错退出，并提示先运行 `list`。
-
-## 已知限制
-
-- skill 和测试用例来自同一批会话。测试检查的是用户的纠正有没有写清楚、新的智能体能不能照着做，无法证明 skill 在新任务上同样有效。
-- 判定由写 skill 的主会话完成。
-- 测试子智能体拥有全部工具。防止它执行对外操作，靠的是用例筛选和任务说明。
-- PilotDeck 的记忆系统也会从会话中记录用户的纠正，主会话和测试子智能体都能看到这些记忆。因此测试通过可能是记忆起的作用，skill 的内容也可能与记忆重复。
-- bash 中需要能运行 `node`。
-
-## 实施计划
-
-1. 写 `sessions.mjs` 和测试，约 1.5 小时。
-   - 验证：`node skills/skill-evolve/scripts/sessions.mjs list` 以及对一个真实会话运行 `read`，输出都正确；`npm test` 通过。
-2. 写 SKILL.md，约 1 小时。
-3. 在 PilotDeck 中用 1 到 2 个真实会话完整运行一次，约 1 小时。
-   - 验证：至少生成并写入一个 skill，下一条消息中能看到它。
-4. 提交到 `feat/skill-evolve`，开 PR。
+- Skills and test cases come from the same sessions, so passing shows that the
+  corrections are written clearly enough to follow, not that the skill
+  generalizes to new tasks.
+- The main session grades the test runs it designed.
+- Test subagents have the full tool set; external actions are prevented only by
+  test-case selection and the directive.
+- PilotDeck memory also records corrections and is visible to the main session
+  and test subagents, so it can contribute to passing tests and overlap with the
+  generated skill.
