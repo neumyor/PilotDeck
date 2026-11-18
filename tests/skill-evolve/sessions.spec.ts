@@ -6,6 +6,8 @@ import { join } from "node:path";
 import test from "node:test";
 
 const SCRIPT = join(process.cwd(), "skills", "skill-evolve", "scripts", "sessions.mjs");
+// Session files are named after the session id; Windows file names cannot contain ":".
+const FILE_SEP = process.platform === "win32" ? "-" : ":";
 
 type Fixture = { home: string; paperProject: string; otherProject: string; cleanup: () => void };
 
@@ -43,7 +45,7 @@ function createFixture(): Fixture {
   writeFileSync(join(otherDir, ".cwd"), otherProject);
 
   const longResult = "x".repeat(5000);
-  writeSession(join(paperDir, "chats"), "web:s_paper.jsonl", [
+  writeSession(join(paperDir, "chats"), `web${FILE_SEP}s_paper.jsonl`, [
     entry("accepted_input", "t1", 1, {
       messages: [{ role: "user", content: [{ type: "text", text: "Revise the introduction of paper.tex" }] }],
     }),
@@ -84,7 +86,7 @@ function createFixture(): Fixture {
     entry("session_metadata", "t2", 10, { metadata: { title: "Paper intro revision" } }),
   ], new Date("2026-11-02T12:00:00Z"));
 
-  writeSession(join(paperDir, "chats"), "web:s_older.jsonl", [
+  writeSession(join(paperDir, "chats"), `web${FILE_SEP}s_older.jsonl`, [
     entry("accepted_input", "t1", 1, {
       messages: [{ role: "user", content: [{ type: "text", text: "Format the bibliography" }] }],
     }),
@@ -96,7 +98,7 @@ function createFixture(): Fixture {
     }),
   ], new Date("2026-11-03T12:00:00Z"));
 
-  writeSession(join(otherDir, "chats"), "web:s_other.jsonl", [
+  writeSession(join(otherDir, "chats"), `web${FILE_SEP}s_other.jsonl`, [
     entry("accepted_input", "t1", 1, {
       messages: [{ role: "user", content: [{ type: "text", text: "Plan the weekly report" }] }],
     }),
@@ -121,10 +123,10 @@ test("list shows the current project's sessions, newest first, without internal 
     assert.equal(status, 0);
     const lines = stdout.trim().split("\n");
     assert.equal(lines.length, 2);
-    assert.match(lines[0], /^1\. web:s_paper \| Paper intro revision \|/);
+    assert.match(lines[0], /^1\. web.s_paper \| Paper intro revision \|/);
     assert.match(lines[0], /Revise the introduction of paper\.tex$/);
-    assert.match(lines[1], /^2\. web:s_older \| Format the bibliography \|/);
-    assert.doesNotMatch(stdout, /always-on|web:s_other/);
+    assert.match(lines[1], /^2\. web.s_older \| Format the bibliography \|/);
+    assert.doesNotMatch(stdout, /always-on|web.s_other/);
   } finally {
     fixture.cleanup();
   }
@@ -135,11 +137,11 @@ test("list --all spans projects and --query filters by message text", () => {
   try {
     const all = run(fixture, fixture.paperProject, ["list", "--all"]);
     assert.equal(all.stdout.trim().split("\n").length, 3);
-    assert.match(all.stdout, new RegExp(`web:s_other \\| .* \\| ${fixture.otherProject.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\|`));
+    assert.match(all.stdout, new RegExp(`web.s_other \\| .* \\| ${fixture.otherProject.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\|`));
 
     const queried = run(fixture, fixture.paperProject, ["list", "--all", "--query", "in recent years"]);
     assert.equal(queried.stdout.trim().split("\n").length, 1);
-    assert.match(queried.stdout, /web:s_paper/);
+    assert.match(queried.stdout, /web.s_paper/);
 
     const none = run(fixture, fixture.paperProject, ["list", "--query", "nothing matches"]);
     assert.equal(none.status, 0);
@@ -177,7 +179,7 @@ test("read renders every turn, including content before compaction", () => {
   try {
     const { status, stdout } = run(fixture, fixture.otherProject, ["read", "web:s_paper", "--tool-chars", "100"]);
     assert.equal(status, 0);
-    assert.match(stdout, /^# Paper intro revision\nsession: web:s_paper\nproject: .*paper\ncreated: .*turns: 2/);
+    assert.match(stdout, /^# Paper intro revision\nsession: web.s_paper\nproject: .*paper\ncreated: .*turns: 2/);
     assert.match(stdout, /## Turn 1 · .*\n\[user\] Revise the introduction of paper\.tex\n\[assistant\] Reading the file first\.\n\[tool_call\] read_file \{"file_path":"paper\.tex"\}/);
     assert.match(stdout, /\[tool_result\] x{100}\n… \[truncated, 5000 chars total\]/);
     assert.match(stdout, /\[subagent explore\] Find related work\n→ Found three papers/);
@@ -186,7 +188,7 @@ test("read renders every turn, including content before compaction", () => {
 
     const withoutPrefix = run(fixture, fixture.otherProject, ["read", "s_paper"]);
     assert.equal(withoutPrefix.status, 0);
-    assert.match(withoutPrefix.stdout, /^# Paper intro revision\nsession: web:s_paper\n/);
+    assert.match(withoutPrefix.stdout, /^# Paper intro revision\nsession: web.s_paper\n/);
   } finally {
     fixture.cleanup();
   }
